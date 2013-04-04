@@ -1,0 +1,10 @@
+build
+*.pyc
+.project
+.settings
+*.swp
+.vagrant
+msg_gen
+parser.out
+parsetab.py
+
