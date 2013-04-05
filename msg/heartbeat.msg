@@ -1,5 +1,0 @@
-string identifer
-uint64 sequence_number
-uint64 dropped_beats
-uint64 out_of_order_beats
-m 
