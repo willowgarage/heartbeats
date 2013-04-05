@@ -1,5 +1,5 @@
 string unique_id
 string node_name
-float64 desired_heartbeat_rate_in_hertz
+float64 publish_rate_in_hertz
 uint64 sequence_number
 float64 local_utc_timestamp

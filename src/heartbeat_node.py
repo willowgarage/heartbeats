@@ -2,7 +2,7 @@ import rospy
 import uuid
 import threading
 from functools import partial
-from msg import Heartbeat, 
+from msg import Heartbeat, HeartbeatUpdate
 
 def no_op(node_name, unique_id):
 	pass
@@ -42,6 +42,8 @@ class HeartbeatNode(threading.Thread):
 
 	def form_all_heartbeats(self):
 		all_heartbeats = []
+		own_heartbeat = self.form_heartbeat()
+		all_heartbeats.append(own_heartbeat)
 		return all_heartbeats
 
 	def on_incoming_heartbeat_update(heartbeat_update_msg):
