@@ -48,8 +48,8 @@ class HeartbeatWithDirtyBit
 * connect callback has been invoked
 """
 class HeartbeatWithDirtyBit:
-	def __init__(self, heartbeat_msg):
-		self._is_dirty = False
+	def __init__(self, heartbeat_msg, is_dirty):
+		self._is_dirty = is_dirty
 		self._heartbeat_msg = heartbeat_msg
 
 	def get_heartbeat_msg(self):
@@ -120,15 +120,23 @@ class HeartbeatNode(threading.Thread):
 		"""
 		The callback for the subscriber on the heartbeat topic. Used to determine connections to other nodes and to echo back to them their beats
 		"""
-		with self._lock:
-			self_node_name = self.get_node_name()
-			incoming_node_name = heartbeat_update_msg.node_name
-			echos = heartbeat_update_msg.echoed_heartbeats
-			for e in echos:
-				if e.node_name == incoming_node_name: #This contains the latest sequence number from the other noe
-					self._latest_incoming_heartbeats[incoming_node_name] = e
-				elif e.node_name == self_node_name: #This is the reflection from the other node
-					self._latest_echos_from_other_nodes[incoming_node_name] = HeartbeatWithDirtyBit(e)
+		if not heartbeat_update_msg.node_name == self.get_node_name():
+			with self._lock:
+				self_node_name = self.get_node_name()
+				incoming_node_name = heartbeat_update_msg.node_name
+				echos = heartbeat_update_msg.echoed_heartbeats
+				for e in echos:
+					if e.node_name == incoming_node_name: #This contains the latest sequence number from the other noe
+						self._latest_incoming_heartbeats[incoming_node_name] = e
+					elif e.node_name == self_node_name: #This is the reflection from the other node
+						if(self._latest_echos_from_other_nodes.has_key(incoming_node_name)):
+							last_echo = self._latest_echos_from_other_nodes[incoming_node_name]
+							self._latest_echos_from_other_nodes[incoming_node_name] = HeartbeatWithDirtyBit(e, is_dirty=last_echo.is_dirty())
+						else:
+							self._latest_echos_from_other_nodes[incoming_node_name] = HeartbeatWithDirtyBit(e, is_dirty=False)
+
+		#else:
+		#	rospy.loginfo(self.get_label() + "Ignoring own heartbeat emission.")
 
 	#Connection Establish/Timeout Event Handling
 	#==========================================================================	
@@ -150,14 +158,14 @@ class HeartbeatNode(threading.Thread):
 			for k in all_echos:
 				hb_echo_obj = self._latest_echos_from_other_nodes[k]
 				delay_between_messages = 1 / self.get_publish_rate_in_hertz()
-				fudge_value = 3 #I came up with this out of my ass
+				fudge_value = 2 #I came up with this out of my ass
 				has_timedout = rospy.get_time() - hb_echo_obj.get_heartbeat_msg().local_utc_timestamp > (delay_between_messages * fudge_value)
 				if has_timedout:
 					keys_to_purge_after_loop.append(k)
-					self._disconnect_cb(self.get_node_name()) #invoke on_disconnect()
+					self._disconnect_cb(k) #invoke on_disconnect()
 				elif not has_timedout and not hb_echo_obj.is_dirty():
 					hb_echo_obj.mark_as_dirty()
-					self._connect_cb(self.get_node_name()) #invoke on_connect() 
+					self._connect_cb(k) #invoke on_connect() 
 			for k in keys_to_purge_after_loop:
 				self._latest_echos_from_other_nodes.pop(k)
 
