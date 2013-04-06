@@ -125,7 +125,7 @@ class HeartbeatNode(threading.Thread):
 			for e in echos:
 				if e.node_name == incoming_node_name: #This contains the latest sequence number from the other noe
 					self._latest_incoming_heartbeats[node_name] = e
-				elseif e.node_name == self_node_name #This is the reflection from the other node
+				elif e.node_name == self_node_name: #This is the reflection from the other node
 					self._latest_echos_from_other_nodes[node_name] = HeartbeatWithDirtyBit(e)
 
 	#Connection Establish/Timeout Event Handling
@@ -134,7 +134,7 @@ class HeartbeatNode(threading.Thread):
 		"""
 		Indicates if a node is alive. This is implied if there is an echo in the latest echos dictionary
 		"""
-		with self._lock
+		with self._lock:
 			return self._latest_echos_from_other_nodes.has_key(node_name)
 
 	def check_for_timeouts_and_invoke_callbacks_as_necessary(self):
@@ -144,7 +144,7 @@ class HeartbeatNode(threading.Thread):
 		"""
 		with self._lock:
 			all_echos = self._latest_echos_from_other_nodes
-			for k in all_echos
+			for k in all_echos:
 				hb_echo_obj = self._latest_echos_from_other_nodes[k]
 				delay_between_messages = 1 / self.get_publish_rate_in_hertz()
 				fudge_value = 3 #I came up with this out of my ass
@@ -152,7 +152,7 @@ class HeartbeatNode(threading.Thread):
 				if has_timedout:
 					self._latest_echos_from_other_nodes.pop(k)
 					self._disconnect_cb(self.get_node_name()) #invoke on_disconnect()
-				else if not has_timeout and not hb_echo_obj.is_dirty():
+				elif not has_timeout and not hb_echo_obj.is_dirty():
 					hb_echo.mark_as_dirty()
 					self._connect_cb(self.get_node_name()) #invoke on_connect() 
 
@@ -191,7 +191,7 @@ class HeartbeatNode(threading.Thread):
 		that this node has heard from as well as the latest heartbeat pulse from
 		this node to others.
 		"""
-		with self._lock
+		with self._lock:
 			hb_update = HeartbeatUpdate()
 			hb_update.node_name = self.get_node_name()
 			hb_update.echoed_heartbeats = []
@@ -206,7 +206,7 @@ class HeartbeatNode(threading.Thread):
 		with self._lock:
 			delay_between_messages = 1.0 / self.get_publish_rate_in_hertz() #Hope my math is ok here: msg_transmit_duration = 1 / f
 			current_time = rospy.get_time()
-			if(current_time - self._time_of_last_publish_in_utc_seconds > delay_between_messages)
+			if (current_time - self._time_of_last_publish_in_utc_seconds > delay_between_messages):
 				self._heartbeat_publisher.publish(self.form_heartbeat_update_for_publication())
 				self._time_of_last_publish_in_utc_seconds = current_time
 

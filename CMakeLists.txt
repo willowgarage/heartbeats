@@ -10,10 +10,10 @@ add_message_files(
   HeartbeatUpdate.msg
 )
 
+catkin_python_setup()
+
 generate_messages(
   DEPENDENCIES std_msgs
 )
-
-#catkin_python_setup()
 
 catkin_package(DEPENDS std_msgs)

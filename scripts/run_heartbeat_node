@@ -30,7 +30,8 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from heartbeat_node import HeartbeatNode
+import heartbeats
+from heartbeats.heartbeat_node import HeartbeatNode
 
 def on_connect():
 	rospy.loginfo("Connected to node %s ", node_name)
@@ -38,7 +39,7 @@ def on_connect():
 def on_disconnect(node_name):
 	rospy.loginfo("Disconnected from node %s", node_name)	
 
-def start_it_up()
+def start_it_up():
 	n = HeartbeatNode(heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = on_connect, disconnect_cb = on_disconnect)
 	n.start()
 	n.join()
