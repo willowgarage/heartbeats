@@ -1,4 +1,3 @@
-string unique_id
 string node_name
 float64 publish_rate_in_hertz
 uint64 sequence_number
