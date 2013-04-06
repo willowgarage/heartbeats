@@ -41,7 +41,7 @@ def on_disconnect(node_name):
 	rospy.loginfo("Disconnected from node %s", node_name)	
 
 def start_it_up():
-	n = HeartbeatNode(heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = on_connect, disconnect_cb = on_disconnect)
+	n = HeartbeatNode(heartbeat_topic = "heartbeats", publish_rate_in_hertz = 5, connect_cb = on_connect, disconnect_cb = on_disconnect, minimum_desired_to_effective_rate_ratio = 0.45)
 	n.start()
 	while not rospy.is_shutdown(): #Needed for ctrl-c technology
 		rospy.sleep(0.1)

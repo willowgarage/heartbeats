@@ -71,9 +71,14 @@ class HeartbeatNode
 """
 
 class HeartbeatNode(threading.Thread):
-	def __init__(self, heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = no_op, disconnect_cb = no_op):
+	def __init__(self, heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = no_op, disconnect_cb = no_op, minimum_desired_to_effective_rate_ratio = 0.25):
 		"""
 		The constructor for this class
+		heartbeat_topic - The topic on which all nodes broadcast and listen for heartbeats
+		publish_rate_in_hertz - The rate this node desired to broadcast pulses at
+		connect_cb - The callback invoked when a connection a node occurs
+		disconnect_cb - The callback invoked when disconnection from node occurs
+		minimum_desired_to_effective_rate_ratio - The ratio we are willing to accept in hearing the pulse echos to qualify a connection, by default 0.25 (i.e. 25 percent of desired rate)
 		"""
 		threading.Thread.__init__(self)
 		self._lock = threading.RLock()
@@ -94,6 +99,11 @@ class HeartbeatNode(threading.Thread):
 		self._heartbeat_subscriber = rospy.Subscriber(heartbeat_topic, HeartbeatUpdate, self.on_incoming_heartbeat_update)
 
 		self._time_of_last_publish_in_utc_seconds = 0
+
+		self._minimum_desired_to_effective_rate_ratio = minimum_desired_to_effective_rate_ratio
+
+	def get_minimum_desired_to_effective_rate_ratio(self):
+		return self._minimum_desired_to_effective_rate_ratio
 
 	def get_publish_rate_in_hertz(self):
 		"""
@@ -155,11 +165,15 @@ class HeartbeatNode(threading.Thread):
 		with self._lock:
 			all_echos = self._latest_echos_from_other_nodes
 			keys_to_purge_after_loop = []
+			minimum_desired_to_effective_rate_ratio = self.get_minimum_desired_to_effective_rate_ratio()
 			for k in all_echos:
 				hb_echo_obj = self._latest_echos_from_other_nodes[k]
-				delay_between_messages = 1 / self.get_publish_rate_in_hertz()
-				fudge_value = 2 #I came up with this out of my ass
-				has_timedout = rospy.get_time() - hb_echo_obj.get_heartbeat_msg().local_utc_timestamp > (delay_between_messages * fudge_value)
+				effective_rate = 1 / (rospy.get_time() - hb_echo_obj.get_heartbeat_msg().local_utc_timestamp)
+				desired_rate = self.get_publish_rate_in_hertz()
+				#assert(effective_rate <= desired_rate)
+				ratio_effective_to_desired = effective_rate / desired_rate
+				#rospy.loginfo(self.get_label() + "effective = %f, desired = %f, ratio = %f", effective_rate, desired_rate, ratio_effective_to_desired)
+				has_timedout = ratio_effective_to_desired < minimum_desired_to_effective_rate_ratio
 				if has_timedout:
 					keys_to_purge_after_loop.append(k)
 					self._disconnect_cb(k) #invoke on_disconnect()
