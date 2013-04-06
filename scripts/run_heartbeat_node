@@ -31,9 +31,10 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 import heartbeats
+import rospy
 from heartbeats.heartbeat_node import HeartbeatNode
 
-def on_connect():
+def on_connect(node_name):
 	rospy.loginfo("Connected to node %s ", node_name)
 
 def on_disconnect(node_name):
@@ -42,6 +43,8 @@ def on_disconnect(node_name):
 def start_it_up():
 	n = HeartbeatNode(heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = on_connect, disconnect_cb = on_disconnect)
 	n.start()
-	n.join()
+	while not rospy.is_shutdown(): #Needed for ctrl-c technology
+		rospy.sleep(0.1)
 
+rospy.init_node('test', anonymous=True)
 start_it_up()

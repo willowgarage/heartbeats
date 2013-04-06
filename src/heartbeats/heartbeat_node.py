@@ -33,7 +33,6 @@
 import rospy
 import uuid
 import threading
-from functools import partial
 from msg import Heartbeat, HeartbeatUpdate
 
 def no_op(node_name):
@@ -51,7 +50,7 @@ class HeartbeatWithDirtyBit
 class HeartbeatWithDirtyBit:
 	def __init__(self, heartbeat_msg):
 		self._is_dirty = False
-		self._heartbeat_msg = echo_msg
+		self._heartbeat_msg = heartbeat_msg
 
 	def get_heartbeat_msg(self):
 		return self._heartbeat_msg
@@ -76,7 +75,8 @@ class HeartbeatNode(threading.Thread):
 		"""
 		The constructor for this class
 		"""
-		self._lock = threading.RLock
+		threading.Thread.__init__(self)
+		self._lock = threading.RLock()
 
 		self._node_name = rospy.get_name()
 		self._heartbeat_topic = heartbeat_topic
@@ -88,8 +88,10 @@ class HeartbeatNode(threading.Thread):
 		self._latest_incoming_heartbeats = {} #dict node_name -> Heartbeat msg, these contain the latest sequence numbers of each external node
 		self._latest_echos_from_other_nodes = {} #dict node_name -> HeartbeatWithDirtyBit object, the object is needed to track a dirty bit connection callbacks
 		
-		self._heartbeat_publisher = rospy.Publisher(heartbeat_topic)	
-		self._heartbeat_subscriber = rospy.Subscriber(heartbeat_topic, cb = partial(self, self.on_incoming_heartbeat_update))
+		self._heartbeat_publisher = rospy.Publisher(heartbeat_topic, HeartbeatUpdate)	
+	
+
+		self._heartbeat_subscriber = rospy.Subscriber(heartbeat_topic, HeartbeatUpdate, self.on_incoming_heartbeat_update)
 
 		self._time_of_last_publish_in_utc_seconds = 0
 
@@ -114,7 +116,7 @@ class HeartbeatNode(threading.Thread):
 			self._sequence_number = self._sequence_number + 1
 			return self._sequence_number
 
-	def on_incoming_heartbeat_update(heartbeat_update_msg):
+	def on_incoming_heartbeat_update(self, heartbeat_update_msg):
 		"""
 		The callback for the subscriber on the heartbeat topic. Used to determine connections to other nodes and to echo back to them their beats
 		"""
@@ -124,9 +126,9 @@ class HeartbeatNode(threading.Thread):
 			echos = heartbeat_update_msg.echoed_heartbeats
 			for e in echos:
 				if e.node_name == incoming_node_name: #This contains the latest sequence number from the other noe
-					self._latest_incoming_heartbeats[node_name] = e
+					self._latest_incoming_heartbeats[incoming_node_name] = e
 				elif e.node_name == self_node_name: #This is the reflection from the other node
-					self._latest_echos_from_other_nodes[node_name] = HeartbeatWithDirtyBit(e)
+					self._latest_echos_from_other_nodes[incoming_node_name] = HeartbeatWithDirtyBit(e)
 
 	#Connection Establish/Timeout Event Handling
 	#==========================================================================	
@@ -144,17 +146,20 @@ class HeartbeatNode(threading.Thread):
 		"""
 		with self._lock:
 			all_echos = self._latest_echos_from_other_nodes
+			keys_to_purge_after_loop = []
 			for k in all_echos:
 				hb_echo_obj = self._latest_echos_from_other_nodes[k]
 				delay_between_messages = 1 / self.get_publish_rate_in_hertz()
 				fudge_value = 3 #I came up with this out of my ass
-				has_timeout = rospy.get_time() - hb_echo_obj.get_heartbeat_msg().local_utc_timestamp > (delay_between_messages * fudge_value)
+				has_timedout = rospy.get_time() - hb_echo_obj.get_heartbeat_msg().local_utc_timestamp > (delay_between_messages * fudge_value)
 				if has_timedout:
-					self._latest_echos_from_other_nodes.pop(k)
+					keys_to_purge_after_loop.append(k)
 					self._disconnect_cb(self.get_node_name()) #invoke on_disconnect()
-				elif not has_timeout and not hb_echo_obj.is_dirty():
-					hb_echo.mark_as_dirty()
+				elif not has_timedout and not hb_echo_obj.is_dirty():
+					hb_echo_obj.mark_as_dirty()
 					self._connect_cb(self.get_node_name()) #invoke on_connect() 
+			for k in keys_to_purge_after_loop:
+				self._latest_echos_from_other_nodes.pop(k)
 
 
 
@@ -217,8 +222,13 @@ class HeartbeatNode(threading.Thread):
 		Thread entry point for HeartbeatNode which drives heartbeat as well as connect
 		and disconnect callbacks
 		"""
+		rospy.loginfo(self.get_label() + "Starting up heartbeat beacon...")
 		r = rospy.Rate(50) #50 Hz should be more than enough...famous last words
-		while rospy.is_ok():			
+		while not rospy.is_shutdown():			
 			self.check_for_timeouts_and_invoke_callbacks_as_necessary()
 			self.push_out_heartbeat_update_if_necessary()
 			r.sleep()
+		rospy.loginfo(self.get_label() + "Heartbeat beacon shutdown.")
+
+	def get_label(self):
+		return "HeartbeatNode (" + self.get_node_name() + "): "
