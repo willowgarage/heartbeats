@@ -35,11 +35,17 @@ import uuid
 import threading
 from msg import Heartbeat, HeartbeatUpdate
 
-def no_op(node_name):
+def default_on_disconnect(node_name):
 	"""
-	This no_op function serves as a prototype of the callback expected for connect and disconnect
+	This no_op function serves as a prototype of the callback expected for disconnect event
 	"""
-	pass
+	rospy.loginfo("Disconnected from node %s.", node_name)
+
+def default_on_connect(node_name):
+	"""
+	This no_op function serves as a prototype of the callback expected for connect event
+	"""
+	rospy.loginfo("Connected to node %s.", node_name)
  
 """
 class HeartbeatWithDirtyBit
@@ -71,7 +77,7 @@ class HeartbeatNode
 """
 
 class HeartbeatNode(threading.Thread):
-	def __init__(self, heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = no_op, disconnect_cb = no_op, minimum_desired_to_effective_rate_ratio = 0.25):
+	def __init__(self, heartbeat_topic = "heartbeats", publish_rate_in_hertz = 1, connect_cb = default_on_connect, disconnect_cb = default_on_disconnect, minimum_desired_to_effective_rate_ratio = 0.25):
 		"""
 		The constructor for this class
 		heartbeat_topic - The topic on which all nodes broadcast and listen for heartbeats
@@ -89,20 +95,24 @@ class HeartbeatNode(threading.Thread):
 		self._connect_cb = connect_cb
 		self._disconnect_cb = disconnect_cb		
 		self._sequence_number = -1
-
 		self._latest_incoming_heartbeats = {} #dict node_name -> Heartbeat msg, these contain the latest sequence numbers of each external node
 		self._latest_echos_from_other_nodes = {} #dict node_name -> HeartbeatWithDirtyBit object, the object is needed to track a dirty bit connection callbacks
 		
+		#Publish and subscribe to same topic to push out heartbeats and hear echos
 		self._heartbeat_publisher = rospy.Publisher(heartbeat_topic, HeartbeatUpdate)	
-	
-
 		self._heartbeat_subscriber = rospy.Subscriber(heartbeat_topic, HeartbeatUpdate, self.on_incoming_heartbeat_update)
 
 		self._time_of_last_publish_in_utc_seconds = 0
-
 		self._minimum_desired_to_effective_rate_ratio = minimum_desired_to_effective_rate_ratio
 
 	def get_minimum_desired_to_effective_rate_ratio(self):
+		"""
+		Tolerance ratio of effective (actual) rate at which echos are received versus the rate at which we're publishing them.
+		Ideally we want this ratio to be 1.0 or higher meaning the echo rate is fast as or faster than we're publishing.
+		In reality it will be lower particularly in degraded lossy networked (e.g. wireless). This threshold sets the bar for
+		what qualifies as a "disconnect". For example, 0.5 means you're willing to accept that echos come in at a rate of 50%
+		of the heartbeat publish rate.
+		"""
 		return self._minimum_desired_to_effective_rate_ratio
 
 	def get_publish_rate_in_hertz(self):
@@ -169,8 +179,7 @@ class HeartbeatNode(threading.Thread):
 			for k in all_echos:
 				hb_echo_obj = self._latest_echos_from_other_nodes[k]
 				effective_rate = 1 / (rospy.get_time() - hb_echo_obj.get_heartbeat_msg().local_utc_timestamp)
-				desired_rate = self.get_publish_rate_in_hertz()
-				#assert(effective_rate <= desired_rate)
+				desired_rate = self.get_publish_rate_in_hertz()				
 				ratio_effective_to_desired = effective_rate / desired_rate
 				#rospy.loginfo(self.get_label() + "effective = %f, desired = %f, ratio = %f", effective_rate, desired_rate, ratio_effective_to_desired)
 				has_timedout = ratio_effective_to_desired < minimum_desired_to_effective_rate_ratio
@@ -226,12 +235,33 @@ class HeartbeatNode(threading.Thread):
 			hb_update.echoed_heartbeats = hb_update.echoed_heartbeats + self.form_list_of_latest_heartbeat_echos()
 			return hb_update
 
+	def find_fastest_heartbeat_of_all_known_heartbeat_nodes(self):
+		"""
+		Determines the faster publish rate of all known heartbeat nodes. This is
+		so as to push out updates fast enough so external node doesn't timeout with
+		this node
+		"""
+		with self._lock: 
+			fastest_publish_rate = 0
+			for k in self._latest_incoming_heartbeats:
+				candidate_rate = self._latest_incoming_heartbeats[k].publish_rate_in_hertz
+				if candidate_rate > fastest_publish_rate:
+					fastest_publish_rate = candidate_rate
+			return fastest_publish_rate
+
 	def push_out_heartbeat_update_if_necessary(self):
 		"""
-		Sends out the pulse at self.publish_rate_in_hertz()
+		Sends out the pulse at self.publish_rate_in_hertz().
+		TODO: The heartbeat is pushed out not necessarily at publish rate, 
+		but at the rate of the fastest node in the network. This is so as 
+		to guarantee heartbeats are echoed fast enough otherwise faster publishers 
+		would disconnect from slower publishes.	We could redesign the protocol to 
+		have separate messages for echos to eliminate this limitation, but fine 
+		for now.
 		"""
 		with self._lock:
-			delay_between_messages = 1.0 / self.get_publish_rate_in_hertz() #Hope my math is ok here: msg_transmit_duration = 1 / f
+			fastest_heartbeat_rate = self.find_fastest_heartbeat_of_all_known_heartbeat_nodes()
+			delay_between_messages = 1.0 / max(self.get_publish_rate_in_hertz(), fastest_heartbeat_rate) #Hope my math is ok here: msg_transmit_duration = 1 / f
 			current_time = rospy.get_time()
 			if (current_time - self._time_of_last_publish_in_utc_seconds > delay_between_messages):
 				self._heartbeat_publisher.publish(self.form_heartbeat_update_for_publication())
@@ -245,7 +275,7 @@ class HeartbeatNode(threading.Thread):
 		and disconnect callbacks
 		"""
 		rospy.loginfo(self.get_label() + "Starting up heartbeat beacon...")
-		r = rospy.Rate(50) #50 Hz should be more than enough...famous last words
+		r = rospy.Rate(150) #150 Hz should be more than enough...famous last words
 		while not rospy.is_shutdown():			
 			self.check_for_timeouts_and_invoke_callbacks_as_necessary()
 			self.push_out_heartbeat_update_if_necessary()
