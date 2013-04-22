@@ -1,9 +1,0 @@
-*All nodes are publishing to "/heartbeat" messages of type "HeartbeatUpdate"
-*"HeartbeatUpdate" indicates a unique id and a list of "Heartbeats"
-*Each "Heartbeat" indicates a sender (unique_id + node name), a sequence number, and local timestamp of that sequence number
-
-*When a heartbeat node receives a HeartbeatUpdate from an id that is not its own:
-   -It looks within the update for a "Heartbeat" with its own id, that indicates that nodes connectivity with self as it has a seq number and the timestamp you sent it. Based on that we can calculate latency.
-   -It updates an entry in a dictionary mapping to that id with the latency. If the latency is greater than threshold, the bond is broken and we invoke a callback if it hasn't happened. If it's less than threshold ,it means we're connected and we invoke connect callbakc if necessary. Easy peasy!
-
-  

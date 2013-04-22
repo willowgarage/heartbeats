@@ -1,8 +1,9 @@
 <package>
   <name>heartbeats</name>
-  <description>Runs and manages tasks/state machines</description>
-  <version>0.1.1</version>
+  <description>An easy way for creating heartbeats across multiple nodes in a ROS graph</description>
+  <version>0.1.0</version>
   <maintainer email="mshah@willowgarage.com">Mirza Shah</maintainer>
+  <author email="mshah@willowgarage.com">Mirza Shah</author>
   <license>BSD</license>
   <url>http://ros.org/wiki/heartbeats</url>
 
