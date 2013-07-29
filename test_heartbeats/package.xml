@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package>
+  <name>test_heartbeats</name>
+  <version>0.0.0</version>
+  <description>The test_heartbeats package</description>
+
+  <maintainer email="mshah@willowgarage.com">Mirza Shah</maintainer>
+
+  <license>BSD</license>
+
+
+  <!--   <test_depend>gtest</test_depend> -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>rospy</build_depend>
+  <build_depend>heartbeats</build_depend>
+  <build_depend>rostest</build_depend>
+  <build_depend>rosunit</build_depend>
+
+
+  <run_depend>rospy</run_depend>
+  <run_depend>heartbeats</run_depend>
+  <run_depend>rostest</run_depend>
+  <run_depend>rosunit</run_depend>
+
+</package>
