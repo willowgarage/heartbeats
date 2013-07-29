@@ -1,0 +1,11 @@
+<launch>
+  <group>
+    
+    <node pkg="test_heartbeats" output="screen" type="heartbeat_B.py" name="HeartbeatB">
+    </node>
+
+    <test test-name="HeartbeatA" pkg="test_heartbeats" type="heartbeat_A.py" />
+    
+  </group>
+
+</launch>
